@@ -15,7 +15,7 @@ from torch.distributions import Normal
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
-xml_path = '2D_double_pendulum.xml'  # XML file (assumes this is in the same folder as this file)
+xml_path = 'rotary inverted pendulum.xml'  # XML file (assumes this is in the same folder as this file)
 simend = 15  # Simulation time
 print_camera_config = 0  # Set to 1 to print camera config
 

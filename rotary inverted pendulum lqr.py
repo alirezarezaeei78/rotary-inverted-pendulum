@@ -6,7 +6,7 @@ import os
 import control
 import math
 
-xml_path = '2D_double_pendulum.xml' #xml file (assumes this is in the same folder as this file)
+xml_path = 'rotary inverted pendulum.xml' #xml file (assumes this is in the same folder as this file)
 simend = 15 #simulation time
 print_camera_config = 0 #set to 1 to print camera config
                         #this is useful for initializing view of the model)

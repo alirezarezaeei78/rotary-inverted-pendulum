@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-xml_path = '2D_double_pendulum.xml' # XML file path
+xml_path = 'rotary inverted pendulum.xml' # XML file path
 simend = 15 # Simulation time
 
 # PID controller parameters
