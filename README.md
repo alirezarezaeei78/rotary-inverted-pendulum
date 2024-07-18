@@ -1,5 +1,4 @@
 
-```markdown
 # Rotary Inverted Pendulum Control Systems
 
 ## Overview
