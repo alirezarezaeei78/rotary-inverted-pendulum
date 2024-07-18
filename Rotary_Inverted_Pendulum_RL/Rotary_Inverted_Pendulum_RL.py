@@ -15,7 +15,7 @@ from torch.distributions import Normal
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
-xml_path = 'rotary inverted pendulum.xml'  # XML file (assumes this is in the same folder as this file)
+xml_path = 'rotary inverted pendulum.xml'  
 simend = 15  # Simulation time
 print_camera_config = 0  # Set to 1 to print camera config
 
@@ -65,7 +65,7 @@ def reinforce(policy, optimizer, n_training_episodes, max_t, gamma, print_every)
             env.data.ctrl[:] = action
             mj.mj_step(env.model, env.data)
             state = np.concatenate([env.data.qpos, env.data.qvel])
-            reward = compute_reward(state)  # Define this function based on your task
+            reward = compute_reward(state) 
             rewards.append(reward)
             if env.data.time >= simend:
                 break
@@ -104,7 +104,7 @@ def evaluate_agent(env, max_steps, n_eval_episodes, policy):
             env.data.ctrl[:] = action
             mj.mj_step(env.model, env.data)
             state = np.concatenate([env.data.qpos, env.data.qvel])
-            reward = compute_reward(state)  # Define this function based on your task
+            reward = compute_reward(state) 
             total_rewards_ep += reward
             if env.data.time >= simend:
                 break
@@ -114,8 +114,7 @@ def evaluate_agent(env, max_steps, n_eval_episodes, policy):
     return mean_reward, std_reward
 
 def compute_reward(state):
-    # Define a reward function based on the state
-    # For example, you might penalize deviations from the desired joint angles and velocities
+
     desired_state = np.zeros_like(state)
     reward = -np.sum((state - desired_state) ** 2)
     return reward
@@ -212,9 +211,9 @@ cam.lookat = np.array([2.0, 1.5, 1.0])
 
 # Run training
 scores, avg_scores = reinforce(policy, optimizer, hyperparameters["n_training_episodes"], hyperparameters["max_t"], hyperparameters["gamma"], 25)
-torch.save(policy.state_dict(), "double_pendulum_reinforce.pt")
+torch.save(policy.state_dict(), "Rotary_Inverted_Pendulum.pt")
 
-policy.load_state_dict(torch.load("double_pendulum_reinforce.pt"))
+policy.load_state_dict(torch.load("Rotary_Inverted_Pendulum.pt"))
 policy.to(device)
 mean_reward, std_reward = evaluate_agent(env, hyperparameters["max_t"], hyperparameters["n_evaluation_episodes"], policy)
 print(f"eval mean reward {mean_reward}  std reward {std_reward}")

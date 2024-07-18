@@ -6,10 +6,9 @@ import os
 import control
 import math
 
-xml_path = 'rotary inverted pendulum.xml' #xml file (assumes this is in the same folder as this file)
-simend = 15 #simulation time
-print_camera_config = 0 #set to 1 to print camera config
-                        #this is useful for initializing view of the model)
+xml_path = 'rotary inverted pendulum.xml' 
+simend = 15 
+print_camera_config = 0 
 
 # For callback functions
 button_left = False
@@ -83,7 +82,6 @@ def linearize():
 
 
 def init_controller(model,data):
-    #initialize the controller here. This function is called once, in the beginning
     #pass
     global K
 
@@ -102,7 +100,6 @@ def init_controller(model,data):
     # print("K = ",K)
 
 def controller(model, data):
-    #put the controller here. This function is called inside the simulation.
     # pass
     global K
 
@@ -219,11 +216,6 @@ glfw.set_cursor_pos_callback(window, mouse_move)
 glfw.set_mouse_button_callback(window, mouse_button)
 glfw.set_scroll_callback(window, scroll)
 
-# Example on how to set camera configuration
-# cam.azimuth = 90
-# cam.elevation = 45
-# cam.distance = 2
-# cam.lookat = np.array([0.0, 0.0, 0])
 cam.azimuth = 35
 cam.elevation = -15
 cam.distance = 7
