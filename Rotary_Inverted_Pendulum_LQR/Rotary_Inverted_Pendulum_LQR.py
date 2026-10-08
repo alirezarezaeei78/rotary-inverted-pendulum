@@ -2,11 +2,11 @@ import mujoco as mj
 from mujoco.glfw import glfw
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+from pathlib import Path
 import control
 import math
 
-xml_path = 'rotary inverted pendulum.xml' 
+xml_path = str(Path(__file__).resolve().parent.parent / 'Mojuco_Rotary_Inverted_Pendulum' / 'rotary inverted pendulum.xml')
 simend = 15 
 print_camera_config = 0 
 
@@ -188,9 +188,6 @@ def scroll(window, xoffset, yoffset):
                       yoffset, scene, cam)
 
 #get the full path
-dirname = os.path.dirname(__file__)
-abspath = os.path.join(dirname + "/" + xml_path)
-xml_path = abspath
 
 # MuJoCo data structures
 model = mj.MjModel.from_xml_path(xml_path)  # MuJoCo model
