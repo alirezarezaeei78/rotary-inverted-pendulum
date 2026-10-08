@@ -2,7 +2,7 @@ import mujoco as mj
 from mujoco.glfw import glfw
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+from pathlib import Path
 from collections import deque
 
 # PyTorch
@@ -15,7 +15,7 @@ from torch.distributions import Normal
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(f"Device: {device}")
 
-xml_path = 'rotary inverted pendulum.xml'  
+xml_path = str(Path(__file__).resolve().parent.parent / 'Mojuco_Rotary_Inverted_Pendulum' / 'rotary inverted pendulum.xml')
 simend = 15  # Simulation time
 print_camera_config = 0  # Set to 1 to print camera config
 
