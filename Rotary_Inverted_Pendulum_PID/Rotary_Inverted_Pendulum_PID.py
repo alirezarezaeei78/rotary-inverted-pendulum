@@ -2,9 +2,9 @@ import mujoco as mj
 from mujoco.glfw import glfw
 import matplotlib.pyplot as plt
 import numpy as np
-import os
+from pathlib import Path
 
-xml_path = 'rotary inverted pendulum.xml' # XML file path
+xml_path = str(Path(__file__).resolve().parent.parent / 'Mojuco_Rotary_Inverted_Pendulum' / 'rotary inverted pendulum.xml')
 simend = 15 # Simulation time
 
 # PID controller parameters
@@ -85,9 +85,6 @@ def scroll(window, xoffset, yoffset):
     action = mj.mjtMouse.mjMOUSE_ZOOM
     mj.mjv_moveCamera(model, action, 0.0, -0.05 * yoffset, scene, cam)
 
-dirname = os.path.dirname(__file__)
-abspath = os.path.join(dirname, xml_path)
-xml_path = abspath
 
 model = mj.MjModel.from_xml_path(xml_path)
 data = mj.MjData(model)
