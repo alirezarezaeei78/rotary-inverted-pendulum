@@ -3,7 +3,5 @@ mujoco
 glfw
 matplotlib
 numpy
-os
-collections
 torch
 control
