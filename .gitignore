@@ -5,3 +5,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Local operating-system and interpreter files
+.DS_Store
+Thumbs.db
