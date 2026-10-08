@@ -24,6 +24,8 @@ previous_error = np.zeros(2)
 
 def pid_control(target, current, dt):
     global integral, previous_error
+    if dt <= 0:
+        raise ValueError("dt must be greater than zero")
     error = target - current
     integral += error * dt
     derivative = (error - previous_error) / dt
@@ -33,7 +35,6 @@ def pid_control(target, current, dt):
 def controller(model, data):
     global integral, previous_error
 
-    print(f"qpos0:{data.qpos[0]} qpos1:{data.qpos[1]}")
 
     target = np.array([0.0, 0.0])  # Target positions for the joints
     current = np.array([data.qpos[0], data.qpos[1]])
@@ -51,6 +52,8 @@ def controller(model, data):
 
 def keyboard(window, key, scancode, act, mods):
     if act == glfw.PRESS and key == glfw.KEY_BACKSPACE:
+        integral.fill(0)
+        previous_error.fill(0)
         mj.mj_resetData(model, data)
         mj.mj_forward(model, data)
 
@@ -86,44 +89,56 @@ def scroll(window, xoffset, yoffset):
     mj.mjv_moveCamera(model, action, 0.0, -0.05 * yoffset, scene, cam)
 
 
-model = mj.MjModel.from_xml_path(xml_path)
-data = mj.MjData(model)
-cam = mj.MjvCamera()
-opt = mj.MjvOption()
+def main():
+    global model, data, cam, opt, scene, context
+    model = mj.MjModel.from_xml_path(xml_path)
+    data = mj.MjData(model)
+    cam = mj.MjvCamera()
+    opt = mj.MjvOption()
 
-glfw.init()
-window = glfw.create_window(1200, 900, "PID Control Demo", None, None)
-glfw.make_context_current(window)
-glfw.swap_interval(1)
+    if not glfw.init():
+        raise RuntimeError("GLFW could not initialize a display")
+    window = glfw.create_window(1200, 900, "PID Control Demo", None, None)
+    if window is None:
+        raise RuntimeError("GLFW could not create a window")
 
-mj.mjv_defaultCamera(cam)
-mj.mjv_defaultOption(opt)
-scene = mj.MjvScene(model, maxgeom=10000)
-context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
+    glfw.make_context_current(window)
+    glfw.swap_interval(1)
 
-glfw.set_key_callback(window, keyboard)
-glfw.set_cursor_pos_callback(window, mouse_move)
-glfw.set_mouse_button_callback(window, mouse_button)
-glfw.set_scroll_callback(window, scroll)
+    mj.mjv_defaultCamera(cam)
+    mj.mjv_defaultOption(opt)
+    scene = mj.MjvScene(model, maxgeom=10000)
+    context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
 
-cam.azimuth = 35
-cam.elevation = -15
-cam.distance = 7
-cam.lookat = np.array([2.0, 1.5, 1.0])
+    glfw.set_key_callback(window, keyboard)
+    glfw.set_cursor_pos_callback(window, mouse_move)
+    glfw.set_mouse_button_callback(window, mouse_button)
+    glfw.set_scroll_callback(window, scroll)
 
-mj.set_mjcb_control(controller)
+    cam.azimuth = 35
+    cam.elevation = -15
+    cam.distance = 7
+    cam.lookat = np.array([2.0, 1.5, 1.0])
 
-while not glfw.window_should_close(window):
-    time_prev = data.time
-    while data.time - time_prev < 1.0 / 60.0:
-        mj.mj_step(model, data)
-    if data.time >= simend:
-        break
-    viewport_width, viewport_height = glfw.get_framebuffer_size(window)
-    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-    mj.mjv_updateScene(model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene)
-    mj.mjr_render(viewport, scene, context)
-    glfw.swap_buffers(window)
-    glfw.poll_events()
+    mj.set_mjcb_control(controller)
 
-glfw.terminate()
+    while not glfw.window_should_close(window):
+        time_prev = data.time
+        while data.time - time_prev < 1.0 / 60.0:
+            mj.mj_step(model, data)
+        if data.time >= simend:
+            break
+        viewport_width, viewport_height = glfw.get_framebuffer_size(window)
+        viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
+        mj.mjv_updateScene(model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene)
+        mj.mjr_render(viewport, scene, context)
+        glfw.swap_buffers(window)
+        glfw.poll_events()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        mj.set_mjcb_control(None)
+        glfw.terminate()

@@ -13,7 +13,6 @@ import torch.optim as optim
 from torch.distributions import Normal
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print(f"Device: {device}")
 
 xml_path = str(Path(__file__).resolve().parent.parent / 'Mojuco_Rotary_Inverted_Pendulum' / 'rotary inverted pendulum.xml')
 simend = 15  # Simulation time
@@ -38,7 +37,7 @@ class Policy(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         mean = self.fc_mean(x)
-        log_std = self.fc_log_std(x)
+        log_std = self.fc_log_std(x).clamp(-20, 2)
         std = torch.exp(log_std)
         return mean, std
 
@@ -50,7 +49,9 @@ class Policy(nn.Module):
         action_log_prob = dist.log_prob(action).sum()
         return action.cpu().detach().numpy()[0], action_log_prob
 
-def reinforce(policy, optimizer, n_training_episodes, max_t, gamma, print_every):
+def reinforce(env, policy, optimizer, n_training_episodes, max_t, gamma, print_every):
+    if max_t < 1 or print_every < 1:
+        raise ValueError("max_t and print_every must be positive")
     scores_deque = deque(maxlen=100)
     scores = []
     avg_scores = []  # For plotting
@@ -65,7 +66,7 @@ def reinforce(policy, optimizer, n_training_episodes, max_t, gamma, print_every)
             env.data.ctrl[:] = action
             mj.mj_step(env.model, env.data)
             state = np.concatenate([env.data.qpos, env.data.qvel])
-            reward = compute_reward(state) 
+            reward = compute_reward(state)
             rewards.append(reward)
             if env.data.time >= simend:
                 break
@@ -78,7 +79,7 @@ def reinforce(policy, optimizer, n_training_episodes, max_t, gamma, print_every)
             returns.appendleft(gamma * disc_return_t + rewards[t])
         eps = np.finfo(np.float32).eps.item()
         returns = torch.tensor(returns).to(device)
-        returns = (returns - returns.mean()) / (returns.std() + eps)
+        returns = (returns - returns.mean()) / (returns.std(unbiased=False) + eps)
         policy_loss = []
         for log_prob, disc_return in zip(saved_log_probs, returns):
             policy_loss.append(-log_prob * disc_return)
@@ -104,7 +105,7 @@ def evaluate_agent(env, max_steps, n_eval_episodes, policy):
             env.data.ctrl[:] = action
             mj.mj_step(env.model, env.data)
             state = np.concatenate([env.data.qpos, env.data.qvel])
-            reward = compute_reward(state) 
+            reward = compute_reward(state)
             total_rewards_ep += reward
             if env.data.time >= simend:
                 break
@@ -126,7 +127,8 @@ class MuJoCoEnv:
 
     def reset(self):
         mj.mj_resetData(self.model, self.data)
-        return self.data
+        mj.mj_forward(self.model, self.data)
+        return np.concatenate([self.data.qpos, self.data.qvel])
 
 def keyboard(window, key, scancode, act, mods):
     if act == glfw.PRESS and key == glfw.KEY_BACKSPACE:
@@ -165,76 +167,93 @@ def scroll(window, xoffset, yoffset):
     mj.mjv_moveCamera(model, action, 0.0, -0.05 * yoffset, scene, cam)
 
 # Initialize environment
-model = mj.MjModel.from_xml_path(xml_path)
-data = mj.MjData(model)
-env = MuJoCoEnv(model, data)
+def main():
+    global model, data, cam, opt, scene, context, env
+    model = mj.MjModel.from_xml_path(xml_path)
+    data = mj.MjData(model)
+    env = MuJoCoEnv(model, data)
 
-state_size = model.nq + model.nv
-action_size = model.nu
+    state_size = model.nq + model.nv
+    action_size = model.nu
 
-hyperparameters = {
-    "h_size": 32,  # Increased hidden layer size
-    "n_training_episodes": 2000,  # Increased number of episodes
-    "n_evaluation_episodes": 10,
-    "max_t": 200,
-    "gamma": 0.99,
-    "lr": 0.0005,  # Reduced learning rate
-    "state_space": state_size,
-    "action_space": action_size,
-}
+    hyperparameters = {
+        "h_size": 32,  # Increased hidden layer size
+        "n_training_episodes": 2000,  # Increased number of episodes
+        "n_evaluation_episodes": 10,
+        "max_t": 200,
+        "gamma": 0.99,
+        "lr": 0.0005,  # Reduced learning rate
+        "state_space": state_size,
+        "action_space": action_size,
+    }
 
-policy = Policy(hyperparameters["state_space"], hyperparameters["action_space"], hyperparameters["h_size"]).to(device)
-optimizer = optim.Adam(policy.parameters(), lr=hyperparameters["lr"])
+    policy = Policy(hyperparameters["state_space"], hyperparameters["action_space"], hyperparameters["h_size"]).to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=hyperparameters["lr"])
 
-# GLFW setup
-glfw.init()
-window = glfw.create_window(1200, 900, "RL Control Demo", None, None)
-glfw.make_context_current(window)
-glfw.swap_interval(1)
+    # GLFW setup
+    if not glfw.init():
+        raise RuntimeError("GLFW could not initialize a display")
+    window = glfw.create_window(1200, 900, "RL Control Demo", None, None)
+    if window is None:
+        raise RuntimeError("GLFW could not create a window")
 
-cam = mj.MjvCamera()
-opt = mj.MjvOption()
-mj.mjv_defaultCamera(cam)
-mj.mjv_defaultOption(opt)
-scene = mj.MjvScene(model, maxgeom=10000)
-context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
+    glfw.make_context_current(window)
+    glfw.swap_interval(1)
 
-glfw.set_key_callback(window, keyboard)
-glfw.set_cursor_pos_callback(window, mouse_move)
-glfw.set_mouse_button_callback(window, mouse_button)
-glfw.set_scroll_callback(window, scroll)
+    cam = mj.MjvCamera()
+    opt = mj.MjvOption()
+    mj.mjv_defaultCamera(cam)
+    mj.mjv_defaultOption(opt)
+    scene = mj.MjvScene(model, maxgeom=10000)
+    context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
 
-cam.azimuth = 35
-cam.elevation = -15
-cam.distance = 7
-cam.lookat = np.array([2.0, 1.5, 1.0])
+    glfw.set_key_callback(window, keyboard)
+    glfw.set_cursor_pos_callback(window, mouse_move)
+    glfw.set_mouse_button_callback(window, mouse_button)
+    glfw.set_scroll_callback(window, scroll)
 
-# Run training
-scores, avg_scores = reinforce(policy, optimizer, hyperparameters["n_training_episodes"], hyperparameters["max_t"], hyperparameters["gamma"], 25)
-torch.save(policy.state_dict(), "Rotary_Inverted_Pendulum.pt")
+    cam.azimuth = 35
+    cam.elevation = -15
+    cam.distance = 7
+    cam.lookat = np.array([2.0, 1.5, 1.0])
 
-policy.load_state_dict(torch.load("Rotary_Inverted_Pendulum.pt"))
-policy.to(device)
-mean_reward, std_reward = evaluate_agent(env, hyperparameters["max_t"], hyperparameters["n_evaluation_episodes"], policy)
-print(f"eval mean reward {mean_reward}  std reward {std_reward}")
+    # Run training
+    scores, avg_scores = reinforce(env, policy, optimizer, hyperparameters["n_training_episodes"], hyperparameters["max_t"], hyperparameters["gamma"], 25)
+    torch.save(policy.state_dict(), "Rotary_Inverted_Pendulum.pt")
 
-plt.plot(avg_scores)
-plt.xlabel('Episode')
-plt.ylabel('Average Score')
-plt.title('Training Progress')
-plt.show()
+    policy.load_state_dict(torch.load("Rotary_Inverted_Pendulum.pt", map_location=device, weights_only=True))
+    policy.to(device)
+    mean_reward, std_reward = evaluate_agent(env, hyperparameters["max_t"], hyperparameters["n_evaluation_episodes"], policy)
+    print(f"eval mean reward {mean_reward}  std reward {std_reward}")
 
-while not glfw.window_should_close(window):
-    time_prev = data.time
-    while data.time - time_prev < 1.0 / 60.0:
-        mj.mj_step(model, data)
-    if data.time >= simend:
-        break
-    viewport_width, viewport_height = glfw.get_framebuffer_size(window)
-    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
-    mj.mjv_updateScene(model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene)
-    mj.mjr_render(viewport, scene, context)
-    glfw.swap_buffers(window)
-    glfw.poll_events()
+    plt.plot(avg_scores)
+    plt.xlabel('Episode')
+    plt.ylabel('Average Score')
+    plt.title('Training Progress')
+    plt.show()
 
-glfw.terminate()
+    env.reset()
+    while not glfw.window_should_close(window):
+        time_prev = data.time
+        while data.time - time_prev < 1.0 / 60.0:
+            state = np.concatenate([data.qpos, data.qvel])
+            with torch.no_grad():
+                action, _ = policy.act(state)
+            data.ctrl[:] = action
+            mj.mj_step(model, data)
+        if data.time >= simend:
+            break
+        viewport_width, viewport_height = glfw.get_framebuffer_size(window)
+        viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
+        mj.mjv_updateScene(model, data, opt, None, cam, mj.mjtCatBit.mjCAT_ALL.value, scene)
+        mj.mjr_render(viewport, scene, context)
+        glfw.swap_buffers(window)
+        glfw.poll_events()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        mj.set_mjcb_control(None)
+        glfw.terminate()

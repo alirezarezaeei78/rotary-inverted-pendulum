@@ -7,8 +7,8 @@ import control
 import math
 
 xml_path = str(Path(__file__).resolve().parent.parent / 'Mojuco_Rotary_Inverted_Pendulum' / 'rotary inverted pendulum.xml')
-simend = 15 
-print_camera_config = 0 
+simend = 15
+print_camera_config = 0
 
 # For callback functions
 button_left = False
@@ -18,32 +18,19 @@ lastx = 0
 lasty = 0
 
 #create the function xdot = f(x,u)
-def f(x,u):
-    #x=q0,q1,qdot0,qdot1
-    #u=torque
-
-    data.qpos[0] = x[0]
-    data.qpos[1] = x[1]
-    data.qvel[0] = x[2]
-    data.qvel[1] = x[3]
-    data.ctrl[0] = u[0]
-    mj.mj_forward(model,data)
-
-    #qddot = inv(M)*(data_ctrl-frc_bias)
-    M = np.zeros((2,2))
-    mj.mj_fullM(model,M,data.qM)
-    invM = np.linalg.inv(M)
-    frc_bias = np.array([data.qfrc_bias[0],data.qfrc_bias[1]])
-    tau = np.array([u[0],0])
-    qddot = np.matmul(invM,np.subtract(tau,frc_bias))
-
-    xdot = np.array([data.qvel[0],data.qvel[1],qddot[0],qddot[1]])
-    return xdot
+def f(x, u):
+    """Evaluate dynamics without altering the live simulation state."""
+    scratch = mj.MjData(model)
+    scratch.qpos[:] = np.asarray(x[:model.nq], dtype=float)
+    scratch.qvel[:] = np.asarray(x[model.nq:], dtype=float)
+    scratch.ctrl[0] = float(u[0])
+    mj.mj_forward(model, scratch)
+    return np.concatenate([scratch.qvel, scratch.qacc])
 
 
 def linearize():
 
-    
+
     n = 4
     m = 1
     A = np.zeros((n,n))
@@ -103,11 +90,10 @@ def controller(model, data):
     # pass
     global K
 
-    print(f"qpos0:{data.qpos[0]} qpos1:{data.qpos[1]}")
     #1. apply congtrol u = -K*x
     x = np.array([data.qpos[0],data.qpos[1],data.qvel[0],data.qvel[1]])
     u = -K.dot(x)
-    data.ctrl[0] = u
+    data.ctrl[0] = float(u[0])
 
     #2 apply disturbance torque
     tau_disturb_mean = 0
@@ -190,68 +176,81 @@ def scroll(window, xoffset, yoffset):
 #get the full path
 
 # MuJoCo data structures
-model = mj.MjModel.from_xml_path(xml_path)  # MuJoCo model
-data = mj.MjData(model)                # MuJoCo data
-cam = mj.MjvCamera()                        # Abstract camera
-opt = mj.MjvOption()                        # visualization options
+def main():
+    global model, data, cam, opt, scene, context
+    model = mj.MjModel.from_xml_path(xml_path)  # MuJoCo model
+    data = mj.MjData(model)                # MuJoCo data
+    cam = mj.MjvCamera()                        # Abstract camera
+    opt = mj.MjvOption()                        # visualization options
 
-# Init GLFW, create window, make OpenGL context current, request v-sync
-glfw.init()
-window = glfw.create_window(1200, 900, "Demo", None, None)
-glfw.make_context_current(window)
-glfw.swap_interval(1)
+    # Init GLFW, create window, make OpenGL context current, request v-sync
+    if not glfw.init():
+        raise RuntimeError("GLFW could not initialize a display")
+    window = glfw.create_window(1200, 900, "Demo", None, None)
+    if window is None:
+        raise RuntimeError("GLFW could not create a window")
 
-# initialize visualization data structures
-mj.mjv_defaultCamera(cam)
-mj.mjv_defaultOption(opt)
-scene = mj.MjvScene(model, maxgeom=10000)
-context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
+    glfw.make_context_current(window)
+    glfw.swap_interval(1)
 
-# install GLFW mouse and keyboard callbacks
-glfw.set_key_callback(window, keyboard)
-glfw.set_cursor_pos_callback(window, mouse_move)
-glfw.set_mouse_button_callback(window, mouse_button)
-glfw.set_scroll_callback(window, scroll)
+    # initialize visualization data structures
+    mj.mjv_defaultCamera(cam)
+    mj.mjv_defaultOption(opt)
+    scene = mj.MjvScene(model, maxgeom=10000)
+    context = mj.MjrContext(model, mj.mjtFontScale.mjFONTSCALE_150.value)
 
-cam.azimuth = 35
-cam.elevation = -15
-cam.distance = 7
-cam.lookat =np.array([ 2.0 , 1.5 , 1.0 ])
+    # install GLFW mouse and keyboard callbacks
+    glfw.set_key_callback(window, keyboard)
+    glfw.set_cursor_pos_callback(window, mouse_move)
+    glfw.set_mouse_button_callback(window, mouse_button)
+    glfw.set_scroll_callback(window, scroll)
 
-#initialize the controller
-init_controller(model,data)
+    cam.azimuth = 35
+    cam.elevation = -15
+    cam.distance = 7
+    cam.lookat =np.array([ 2.0 , 1.5 , 1.0 ])
 
-#set the controller
-mj.set_mjcb_control(controller)
+    #initialize the controller
+    init_controller(model,data)
 
-while not glfw.window_should_close(window):
-    time_prev = data.time
+    #set the controller
+    mj.set_mjcb_control(controller)
 
-    while (data.time - time_prev < 1.0/60.0):
-        mj.mj_step(model, data)
+    while not glfw.window_should_close(window):
+        time_prev = data.time
 
-    if (data.time>=simend):
-        break;
+        while (data.time - time_prev < 1.0/60.0):
+            mj.mj_step(model, data)
 
-    # get framebuffer viewport
-    viewport_width, viewport_height = glfw.get_framebuffer_size(
-        window)
-    viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
+        if (data.time>=simend):
+            break;
 
-    #print camera configuration (help to initialize the view)
-    if (print_camera_config==1):
-        print('cam.azimuth =',cam.azimuth,';','cam.elevation =',cam.elevation,';','cam.distance = ',cam.distance)
-        print('cam.lookat =np.array([',cam.lookat[0],',',cam.lookat[1],',',cam.lookat[2],'])')
+        # get framebuffer viewport
+        viewport_width, viewport_height = glfw.get_framebuffer_size(
+            window)
+        viewport = mj.MjrRect(0, 0, viewport_width, viewport_height)
 
-    # Update scene and render
-    mj.mjv_updateScene(model, data, opt, None, cam,
-                       mj.mjtCatBit.mjCAT_ALL.value, scene)
-    mj.mjr_render(viewport, scene, context)
+        #print camera configuration (help to initialize the view)
+        if (print_camera_config==1):
+            print('cam.azimuth =',cam.azimuth,';','cam.elevation =',cam.elevation,';','cam.distance = ',cam.distance)
+            print('cam.lookat =np.array([',cam.lookat[0],',',cam.lookat[1],',',cam.lookat[2],'])')
 
-    # swap OpenGL buffers (blocking call due to v-sync)
-    glfw.swap_buffers(window)
+        # Update scene and render
+        mj.mjv_updateScene(model, data, opt, None, cam,
+                           mj.mjtCatBit.mjCAT_ALL.value, scene)
+        mj.mjr_render(viewport, scene, context)
 
-    # process pending GUI events, call GLFW callbacks
-    glfw.poll_events()
+        # swap OpenGL buffers (blocking call due to v-sync)
+        glfw.swap_buffers(window)
 
-glfw.terminate()
+        # process pending GUI events, call GLFW callbacks
+        glfw.poll_events()
+
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        mj.set_mjcb_control(None)
+        glfw.terminate()

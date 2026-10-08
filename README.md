@@ -40,6 +40,16 @@ python Rotary_Inverted_Pendulum_RL/Rotary_Inverted_Pendulum_RL.py
 
 The scripts resolve the shared XML model relative to their own file locations. Review simulation duration, gains, and training settings before running a script. RL training can take substantially longer than a classical-controller demonstration.
 
+## Headless regression checks
+
+Importing the controller modules does not open a viewer or start training. Run the short PID reset, LQR dynamics, and one-step REINFORCE checks with:
+
+```sh
+python -m unittest discover -s tests -v
+```
+
+LQR and RL checks are skipped when their optional dependencies are unavailable. The LQR check verifies that numerical linearization leaves the live simulation state unchanged; the RL check covers a one-step episode without NaN parameters. These checks do not measure controller performance.
+
 ## Model and results
 
 - [MuJoCo model](Mojuco_Rotary_Inverted_Pendulum/rotary%20inverted%20pendulum.xml)
